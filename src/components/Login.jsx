@@ -54,7 +54,7 @@ export default function Login() {
           <div className="mb-6 flex justify-center w-full">
             <img src={logo} alt="Gyromotion Logo" style={{ width: '100%', height: 'auto', objectFit: 'contain' }} />
           </div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '700' }}>Gyromotion Sign In</h2>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '700' }}>Gyromotion Patient Management System</h2>
           <p className="text-muted text-sm mt-2">Sign in with your staff account.</p>
         </div>
 
