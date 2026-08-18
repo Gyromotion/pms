@@ -26,7 +26,8 @@ export function AuthProvider({ children }) {
                 uid: user.uid,
                 email: user.email,
                 role: userData.role || 'worker',
-                name: userData.name || 'Staff'
+                name: userData.name || 'Staff',
+                needsTour: userData.needsTour || false
               });
             }
           } else {

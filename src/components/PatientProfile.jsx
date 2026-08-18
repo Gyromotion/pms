@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getPatientById, savePatient, deletePatient, getAppointments, saveAppointment } from '../lib/storage';
 import { format, addHours, parseISO } from 'date-fns';
@@ -12,6 +13,8 @@ export default function PatientProfile() {
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showRenewModal, setShowRenewModal] = useState(false);
+  const [renewType, setRenewType] = useState('renew'); // 'renew' or 'upgrade'
   
   // Session logging state
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
@@ -130,6 +133,42 @@ export default function PatientProfile() {
       }
   }
 
+  const handleRenewPackage = async (e) => {
+    e.preventDefault();
+    if (!category || !subCategory || !pkgType) return alert('Please select a complete package.');
+    if (!sessionPrice) return alert('Please enter an amount.');
+
+    const isUpgrade = renewType === 'upgrade';
+    
+    // Archive current package into history
+    const historyEntry = {
+      startDate: patient.startDate,
+      endDate: new Date().toISOString(),
+      packageDays: patient.packageDays,
+      paymentAmount: patient.paymentAmount,
+      paymentMethod: patient.paymentMethod,
+      sessions: patient.sessions,
+      isUpgrade: isUpgrade
+    };
+
+    const updatedPatient = {
+      ...patient,
+      packageDays: pkgType,
+      paymentAmount: sessionPrice,
+      paymentMethod: sessionPaymentMethod,
+      paymentReceived: true,
+      startDate: new Date().toISOString(),
+      sessions: [], // Reset sessions
+      packageHistory: [...(patient.packageHistory || []), historyEntry],
+      lastEditedBy: currentUser?.name
+    };
+
+    await savePatient(updatedPatient);
+    setPatient(updatedPatient);
+    setShowRenewModal(false);
+    alert(`Successfully ${isUpgrade ? 'upgraded' : 'renewed'} package!`);
+  };
+
   // --- APPOINTMENT SCHEDULING LOGIC ---
   const handleScheduleAppointment = async () => {
     if (!aptDate || !aptTime) return alert('Please select a date and time.');
@@ -158,11 +197,11 @@ export default function PatientProfile() {
     }
   };
 
-  // Generate Time Slots from 9:00 AM to 6:00 PM in 30 min intervals
+  // Generate Time Slots from 8:00 AM to 11:00 PM in 30 min intervals
   const timeSlots = [];
-  for (let i = 9; i <= 18; i++) {
+  for (let i = 8; i <= 23; i++) {
     for (let mins of ['00', '30']) {
-      if (i === 18 && mins === '30') continue; // Stop at 6:00 PM
+      if (i === 23 && mins === '30') continue; // Stop at 11:00 PM
       
       const timeStr = `${i.toString().padStart(2, '0')}:${mins}`;
       let disabled = true;
@@ -203,9 +242,11 @@ export default function PatientProfile() {
           <button onClick={handleGenerateInvoice} className="btn btn-outline" style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}>
             <Printer size={16} /> Generate Invoice
           </button>
+        {currentUser?.role === 'admin' && (
           <Link to={`/patients/${patient.id}/edit`} className="btn btn-secondary">
             <Edit size={18} /> Edit
           </Link>
+        )}
           <button onClick={handleDelete} className="btn btn-outline" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>
             <Trash2 size={18} /> Delete
           </button>
@@ -297,6 +338,25 @@ export default function PatientProfile() {
                   <span style={{ fontWeight: '700', color: 'var(--success)' }}>₹{dailyTotalPaid}</span>
                </div>
              )}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            {isCompleted && !isDaily && (
+              <button 
+                className="btn btn-primary flex-1 py-2 text-sm" 
+                onClick={() => { setRenewType('renew'); setShowRenewModal(true); }}
+              >
+                Renew Package
+              </button>
+            )}
+            {isDaily && (
+              <button 
+                className="btn btn-secondary flex-1 py-2 text-sm"
+                onClick={() => { setRenewType('upgrade'); setShowRenewModal(true); }}
+              >
+                Upgrade to Package
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -481,14 +541,79 @@ export default function PatientProfile() {
             style={{ maxWidth: '400px', width: '90%', padding: '2rem', backgroundColor: '#fff', cursor: 'default' }}
           >
             <h2 className="mb-4 text-xl">Generate Invoice</h2>
-            <p className="mb-6">Do you want to include the Attendance History (Dates & Protocol Recorded) in this invoice?</p>
-            <div className="flex justify-end gap-3">
-              <button type="button" className="btn btn-secondary mr-auto" onClick={(e) => { e.stopPropagation(); setShowInvoiceModal(false); }}>Cancel</button>
-              <Link to={`/patients/${id}/invoice?includeHistory=false`} className="btn btn-outline" onClick={(e) => e.stopPropagation()}>No</Link>
-              <Link to={`/patients/${id}/invoice?includeHistory=true`} className="btn btn-primary" onClick={(e) => e.stopPropagation()}>Yes</Link>
+            <p className="mb-6">Do you want to generate the bill for just the current package, or a consolidated bill including all past renewals?</p>
+            <div className="flex flex-col gap-3">
+              <Link to={`/patients/${id}/invoice?billMode=current`} className="btn btn-outline" onClick={(e) => e.stopPropagation()}>Current Package Only</Link>
+              {patient.packageHistory?.length > 0 && (
+                <Link to={`/patients/${id}/invoice?billMode=all`} className="btn btn-primary" onClick={(e) => e.stopPropagation()}>Complete History (All Renewals)</Link>
+              )}
+              <button type="button" className="btn btn-secondary mt-2" onClick={(e) => { e.stopPropagation(); setShowInvoiceModal(false); }}>Cancel</button>
             </div>
           </div>
         </div>
+      )}
+
+      {showRenewModal && createPortal(
+        <div className="modal-overlay" onClick={() => setShowRenewModal(false)}>
+          <div className="modal-content p-6" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <h2 className="mb-4">{renewType === 'upgrade' ? 'Upgrade to Package' : 'Renew Package'}</h2>
+            
+            <div style={{ border: '1px solid var(--primary-color)', backgroundColor: '#eff6ff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+              <p className="text-sm" style={{ color: '#1e3a8a', margin: 0 }}>
+                <strong>Note:</strong> This will safely archive all {patient.sessions?.length} past sessions into the patient's history and start a fresh package from today.
+              </p>
+            </div>
+            
+            <form onSubmit={handleRenewPackage}>
+              <div className="form-group">
+                <label className="form-label">Select New Package Duration</label>
+                <select className="form-control" value={pkgType} onChange={e => setPkgType(e.target.value)} required>
+                  <option value="">-- Select --</option>
+                  <option value="10">10 Days Package</option>
+                  <option value="15">15 Days Package</option>
+                  <option value="per_session">Pay Daily (Per Session)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="form-group">
+                  <label className="form-label">Category</label>
+                  <select className="form-control" value={category} onChange={e => { setCategory(e.target.value); setSubCategory(''); }} required>
+                    <option value="">-- Select --</option>
+                    {Object.keys(mainPricingMatrix).map(k => <option key={k} value={k}>{mainPricingMatrix[k].label}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Treatment Type</label>
+                  <select className="form-control" value={subCategory} onChange={e => setSubCategory(e.target.value)} required disabled={!category}>
+                    <option value="">-- Select --</option>
+                    {category && mainPricingMatrix[category].options.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="form-group">
+                  <label className="form-label">Amount (₹)</label>
+                  <input type="number" className="form-control" value={sessionPrice} onChange={e => setSessionPrice(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Payment Method</label>
+                  <select className="form-control" value={sessionPaymentMethod} onChange={e => setSessionPaymentMethod(e.target.value)}>
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end mt-4">
+                <button type="button" className="btn btn-outline" onClick={() => setShowRenewModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">{renewType === 'upgrade' ? 'Confirm Upgrade' : 'Confirm Renewal'}</button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

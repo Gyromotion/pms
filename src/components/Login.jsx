@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
+import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 import logo from '../assets/logo.png';
 
 export default function Login() {
@@ -17,7 +18,23 @@ export default function Login() {
     setMsg('');
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      
+      try {
+        const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+        const userData = userDoc.exists() ? userDoc.data() : { name: 'Unknown', role: 'worker' };
+        
+        await addDoc(collection(db, 'login_logs'), {
+          uid: cred.user.uid,
+          email: cred.user.email,
+          name: userData.name,
+          role: userData.role,
+          timestamp: new Date().toISOString()
+        });
+      } catch(logErr) {
+        console.error("Failed to write login log", logErr);
+      }
+
       window.location.hash = '/';
     } catch (err) {
       setError("Failed to sign in. Please check your credentials.");

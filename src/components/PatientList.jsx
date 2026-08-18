@@ -31,10 +31,20 @@ export default function PatientList() {
     loadData();
   }, []);
 
-  const filteredPatients = patients.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.phone.includes(search)
-  );
+  const filteredPatients = patients.filter(p => {
+    const searchLower = search.toLowerCase().trim();
+    const regNoLower = (p.regNo || '').toLowerCase();
+    
+    // Extract just the core numeric ID, ignoring 'INV/', 'GPC/', and any trailing '-12345'
+    // E.g., 'INV/052026349-18122935' -> '052026349'
+    const match = searchLower.match(/(?:inv|gpc)\/?\s*(\d+)/i);
+    const coreId = match ? match[1] : searchLower;
+    
+    return p.name.toLowerCase().includes(searchLower) || 
+           p.phone.includes(searchLower) ||
+           regNoLower.includes(searchLower) ||
+           (coreId && regNoLower.includes(coreId));
+  });
 
   const sortedPatients = [...filteredPatients].sort((a, b) => {
     if (!sortConfig.key) return 0;

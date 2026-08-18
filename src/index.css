@@ -227,6 +227,35 @@ tr:hover td {
 }
 
 /* Utilities */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-content {
+  background-color: var(--surface-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  animation: modalEnter 0.2s ease-out;
+}
+
+@keyframes modalEnter {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
 .flex { display: flex; }
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
@@ -241,6 +270,10 @@ tr:hover td {
 .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
 
 /* Sidebar */
+.mobile-header {
+  display: none;
+}
+
 .sidebar {
   width: 260px;
   background-color: var(--surface-color);
@@ -303,33 +336,65 @@ tr:hover td {
     flex-direction: column;
   }
 
-  .sidebar {
-    width: 100%;
-    border-right: none;
+  .mobile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: var(--surface-color);
     border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 900;
   }
 
-  .sidebar-header {
-    padding: 1rem;
+  .mobile-menu-btn {
+    background: none;
+    border: none;
+    color: var(--text-main);
+    cursor: pointer;
+    padding: 0.25rem;
     display: flex;
+    align-items: center;
     justify-content: center;
   }
 
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    width: 280px;
+    height: 100vh;
+    z-index: 999;
+    transition: transform 0.3s ease;
+    border-right: 1px solid var(--border-color);
+    background-color: var(--surface-color);
+  }
+
+  .sidebar.open {
+    transform: translateX(280px);
+  }
+
+  .sidebar-header {
+    padding: 1.5rem;
+  }
+
   .sidebar-nav {
-    flex-direction: row;
-    justify-content: space-around;
-    padding: 0.5rem;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 1rem 0;
   }
 
   .nav-item {
-    flex-direction: column;
-    padding: 0.5rem;
-    font-size: 0.75rem;
-    gap: 0.25rem;
+    flex-direction: row;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.95rem;
+    gap: 0.75rem;
   }
 
   .main-content {
     padding: 1rem;
+    margin-top: 0;
   }
 
   .grid-cols-2, 
@@ -343,10 +408,15 @@ tr:hover td {
 }
 
 @media print {
-  body {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  body, html {
     background: white;
   }
-  .sidebar, .no-print, .app-container > footer {
+  /* Ensure Sidebar is hidden when printing */
+  .sidebar, .no-print, footer, .app-container > footer, .mobile-header, .sidebar-backdrop {
     display: none !important;
   }
   .app-container {
@@ -362,8 +432,14 @@ tr:hover td {
   }
   .invoice-page {
     box-shadow: none !important;
-    padding: 0 !important;
+    margin: 0 auto !important;
+    /* width/padding/minHeight are natively inherited from inline styles perfectly! */
+  }
+  .print-spacer {
+    display: none !important; /* Not needed since flexGrow handles everything */
+  }
+  .print-footer {
     width: 100%;
-    max-width: 100%;
+    background: transparent;
   }
 }

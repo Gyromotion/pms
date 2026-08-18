@@ -10,8 +10,9 @@ export default function Invoice() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [patient, setPatient] = useState(null);
+  const [invoiceUniqueId] = useState(() => format(new Date(), 'ddHHmmss'));
   
-  const includeHistory = searchParams.get('includeHistory') === 'true';
+  const billMode = searchParams.get('billMode') || 'current';
   
   useEffect(() => {
     async function load() {
@@ -25,17 +26,40 @@ export default function Invoice() {
 
   let totalAmount = 0;
   let dateRange = format(new Date(patient.startDate || new Date()), 'dd/MM/yyyy');
+  let allAttendance = [];
 
-  if (patient.packageDays === 'daily') {
-    totalAmount = patient.sessions ? patient.sessions.reduce((sum, s) => sum + Number(s.amountPaid || 0), 0) : 0;
-    if (patient.sessions && patient.sessions.length > 0) {
-      const dates = patient.sessions.map(s => new Date(s.date).getTime()).sort();
+  const billItems = [];
+
+  if (billMode === 'all' && patient.packageHistory) {
+    patient.packageHistory.forEach((hist) => {
+      if (hist.packageDays === 'daily' && hist.sessions) {
+        hist.sessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: hist.diagnosis}));
+        allAttendance = [...allAttendance, ...hist.sessions];
+      } else if (hist.packageDays !== 'daily') {
+        billItems.push({...hist, isPackage: true});
+        if (hist.sessions) allAttendance = [...allAttendance, ...hist.sessions];
+      }
+    });
+  }
+
+  if (patient.packageDays === 'daily' && patient.sessions) {
+    patient.sessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: patient.diagnosis}));
+    allAttendance = [...allAttendance, ...patient.sessions];
+  } else if (patient.packageDays !== 'daily') {
+    billItems.push({...patient, isPackage: true});
+    if (patient.sessions) allAttendance = [...allAttendance, ...patient.sessions];
+  }
+
+  // Calculate totals and dates
+  totalAmount = billItems.reduce((sum, item) => sum + Number(item.isSession ? (item.amountPaid || 0) : (item.paymentAmount || 0)), 0);
+  
+  if (billItems.length > 0) {
+    const dates = billItems.map(item => new Date(item.isSession ? item.date : item.startDate).getTime()).sort();
+    if (dates.length > 0) {
       const firstDate = format(new Date(dates[0]), 'dd/MM/yyyy');
       const lastDate = format(new Date(dates[dates.length - 1]), 'dd/MM/yyyy');
-      dateRange = dates.length === 1 ? firstDate : `${firstDate} - ${lastDate}`;
+      dateRange = firstDate === lastDate ? firstDate : `${firstDate} - ${lastDate}`;
     }
-  } else {
-    totalAmount = Number(patient.paymentAmount || 0);
   }
 
   return (
@@ -46,7 +70,20 @@ export default function Invoice() {
         <button className="btn btn-primary" onClick={() => window.print()}>Print / Save as PDF</button>
       </div>
 
-      <div className="invoice-page relative" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#fff', color: '#1e3a5f', padding: '40px 50px', maxWidth: '850px', margin: '0 auto', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', fontFamily: 'Arial, sans-serif', minHeight: '1122px', position: 'relative', overflow: 'hidden' }}>
+      {/* Strict A4 Container */}
+      <div className="invoice-page" style={{ 
+        width: '210mm',
+        minHeight: '297mm',
+        display: 'flex', 
+        flexDirection: 'column', 
+        boxSizing: 'border-box', 
+        backgroundColor: '#fff', 
+        color: '#1e3a5f', 
+        padding: '15mm 20mm', 
+        margin: '0 auto', 
+        boxShadow: '0 10px 30px rgba(0,0,0,0.1)', 
+        fontFamily: 'Arial, sans-serif' 
+      }}>
         
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -65,15 +102,26 @@ export default function Invoice() {
           www.gyromotionphysio.in | +91 9518554022 | gyromotion.physio@gmail.com
         </div>
 
-        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '1.15rem', marginBottom: '30px', position: 'relative' }}>
-          PHYSIOTHERAPY TREATMENT BILL CUM RECIEPT
-          <span style={{ position: 'absolute', right: 0, top: '5px', fontSize: '0.7rem' }}>No.{patient.regNo ? patient.regNo.slice(-3) : '001'}</span>
+        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '1.15rem', marginBottom: '5px' }}>
+            PHYSIOTHERAPY TREATMENT BILL CUM RECIEPT
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>
+            Invoice No: {patient.regNo ? patient.regNo.replace('GPC/', 'INV/') + `-${invoiceUniqueId}` : `INV/${patient.id.slice(-4)}-${invoiceUniqueId}`}
+          </div>
         </div>
 
-        <div style={{ marginBottom: '25px', fontSize: '1.05rem', lineHeight: '1.6' }}>
-          <div><strong style={{ color: '#0f172a' }}>Name:</strong> {patient.name}</div>
-          <div><strong style={{ color: '#0f172a' }}>Patient Reg. No.:</strong> {patient.regNo || 'GPC/000000'}</div>
-          <div><strong style={{ color: '#0f172a' }}>Date:</strong> {dateRange}</div>
+        <div style={{ marginBottom: '25px', fontSize: '1.05rem', lineHeight: '1.6', display: 'flex', justifyContent: 'space-between' }}>
+          <div>
+            <div><strong style={{ color: '#0f172a' }}>Name:</strong> {patient.name}</div>
+            <div><strong style={{ color: '#0f172a' }}>Patient Reg. No.:</strong> {patient.regNo || 'GPC/000000'}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div><strong style={{ color: '#0f172a' }}>Date:</strong> {dateRange}</div>
+            {patient.packageDays !== 'daily' && (
+              <div><strong style={{ color: '#0f172a' }}>Sessions Completed:</strong> {patient.sessions?.length || 0} / {patient.packageDays}</div>
+            )}
+          </div>
         </div>
 
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '25px' }}>
@@ -88,41 +136,45 @@ export default function Invoice() {
             </tr>
           </thead>
           <tbody>
-            {patient.packageDays === 'daily' && patient.sessions ? (
-              patient.sessions.map((session, index) => (
-                <tr key={index}>
-                  <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>
-                    <span style={{ backgroundColor: '#eff6ff', padding: '4px 12px', borderRadius: '12px', fontSize: '0.9rem' }}>{index + 1}</span>
-                  </td>
-                  <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>
-                    <span style={{ backgroundColor: '#eff6ff', padding: '4px 10px', borderRadius: '12px', fontSize: '0.9rem' }}>{format(new Date(session.date), 'dd/MM/yyyy')}</span>
-                  </td>
-                  <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{session.protocol || patient.diagnosis || 'Consultation & Treatment'}</td>
-                  <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{session.amountPaid}/-</td>
-                  <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>1</td>
-                  <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{session.amountPaid}/-</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>
-                  <span style={{ backgroundColor: '#eff6ff', padding: '4px 12px', borderRadius: '12px', fontSize: '0.9rem' }}>1</span>
-                </td>
-                <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>
-                  <span style={{ backgroundColor: '#eff6ff', padding: '4px 10px', borderRadius: '12px', fontSize: '0.9rem' }}>{format(new Date(patient.startDate || new Date()), 'dd/MM/yyyy')}</span>
-                </td>
-                <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{patient.diagnosis || 'Package Payment'}</td>
-                <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>
-                  {patient.paymentAmount ? (patient.paymentAmount / parseInt(patient.packageDays)).toFixed(0) : 0}/-
-                </td>
-                <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>{patient.packageDays}</td>
-                <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{patient.paymentAmount}/-</td>
-              </tr>
-            )}
+            {billItems.map((item, index) => {
+              if (item.isSession) {
+                return (
+                  <tr key={index} style={{ pageBreakInside: 'avoid' }}>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>
+                      <span style={{ backgroundColor: '#eff6ff', padding: '4px 12px', borderRadius: '12px', fontSize: '0.9rem' }}>{index + 1}</span>
+                    </td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>
+                      <span style={{ backgroundColor: '#eff6ff', padding: '4px 10px', borderRadius: '12px', fontSize: '0.9rem' }}>{format(new Date(item.date), 'dd/MM/yyyy')}</span>
+                    </td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{item.protocol || item.diagnosis || 'Consultation & Treatment'}</td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{item.amountPaid}/-</td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>1</td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{item.amountPaid}/-</td>
+                  </tr>
+                );
+              } else {
+                return (
+                  <tr key={index} style={{ pageBreakInside: 'avoid' }}>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>
+                      <span style={{ backgroundColor: '#eff6ff', padding: '4px 12px', borderRadius: '12px', fontSize: '0.9rem' }}>{index + 1}</span>
+                    </td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>
+                      <span style={{ backgroundColor: '#eff6ff', padding: '4px 10px', borderRadius: '12px', fontSize: '0.9rem' }}>{format(new Date(item.startDate || new Date()), 'dd/MM/yyyy')}</span>
+                    </td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{item.diagnosis || 'Package Payment'}</td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>
+                      {item.paymentAmount ? (item.paymentAmount / parseInt(item.packageDays)).toFixed(0) : 0}/-
+                    </td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center' }}>{item.packageDays}</td>
+                    <td style={{ border: '1px solid #93c5fd', padding: '12px' }}>{item.paymentAmount}/-</td>
+                  </tr>
+                );
+              }
+            })}
             <tr>
               <td colSpan="4" style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'left', fontWeight: 'bold' }}>Total</td>
               <td style={{ border: '1px solid #93c5fd', padding: '12px', textAlign: 'center', fontWeight: 'bold' }}>
-                {patient.packageDays === 'daily' ? (patient.sessions ? patient.sessions.length : 0) : patient.packageDays}
+                {billItems.reduce((sum, item) => sum + (item.isSession ? 1 : Number(item.packageDays || 0)), 0)}
               </td>
               <td style={{ border: '1px solid #93c5fd', padding: '12px', fontWeight: 'bold' }}>{totalAmount}/-</td>
             </tr>
@@ -133,44 +185,24 @@ export default function Invoice() {
           <strong style={{ color: '#0f172a' }}>Total Amount in Words:</strong> {numberToWordsRupees(totalAmount)}
         </div>
 
-        {includeHistory && patient.sessions && patient.sessions.length > 0 && (
-          <div style={{ pageBreakInside: 'avoid', position: 'relative', zIndex: 10 }}>
-            <h4 style={{ color: '#1e3a8a', borderBottom: '2px solid #93c5fd', paddingBottom: '5px', marginBottom: '15px' }}>Attendance History</h4>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-              <thead>
-                <tr>
-                  <th style={{ border: '1px solid #93c5fd', padding: '8px', textAlign: 'left', backgroundColor: '#eff6ff', width: '120px', color: '#1e3a8a' }}>Date</th>
-                  <th style={{ border: '1px solid #93c5fd', padding: '8px', textAlign: 'left', backgroundColor: '#eff6ff', color: '#1e3a8a' }}>Protocol Recorded</th>
-                </tr>
-              </thead>
-              <tbody>
-                {patient.sessions.map((session, index) => (
-                  <tr key={index}>
-                    <td style={{ border: '1px solid #93c5fd', padding: '8px' }}>{format(new Date(session.date), 'dd/MM/yyyy')}</td>
-                    <td style={{ border: '1px solid #93c5fd', padding: '8px', color: '#1e3a8a', fontWeight: '500' }}>
-                      {session.protocol || patient.diagnosis || 'Consultation & Treatment'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Spacer to perfectly stretch the A4 page */}
+        <div style={{ flexGrow: 1, minHeight: '50px' }}></div>
+
+        {/* Footer sticks exactly to bottom margin */}
+        <div style={{ position: 'relative', width: '100%', marginTop: 'auto', paddingTop: '40px' }}>
+          
+          <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '15px', textAlign: 'center', fontStyle: 'italic', fontSize: '0.95rem', color: '#1e3a8a', position: 'relative', zIndex: 10 }}>
+            Plot no. 01, Shree Siddhiviinayak Society, Nr. Pawar Hospital, Vatan Nagar,<br/>
+            Talegaon Dabhade, Pune- 410507
           </div>
-        )}
 
-        {/* Spacer for stamps and signatures */}
-        <div style={{ flexGrow: 1, minHeight: '150px' }}></div>
+          {/* Swoosh Design */}
+          <svg className="print-swoosh" style={{ position: 'absolute', bottom: 0, right: 0, zIndex: 0, width: '350px', height: '350px', pointerEvents: 'none' }} viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M400,400 L400,200 C300,250 150,300 0,400 Z" fill="#93c5fd" opacity="0.4" />
+            <path d="M400,400 L400,250 C250,280 100,350 0,400 Z" fill="#1e3a8a" opacity="0.15" />
+          </svg>
 
-        <div style={{ textAlign: 'center', fontStyle: 'italic', fontSize: '0.95rem', color: '#1e3a8a', position: 'relative', zIndex: 10, paddingBottom: '10px' }}>
-          Plot no. 01, Shree Siddhiviinayak Society, Nr. Pawar Hospital, Vatan Nagar,<br/>
-          Talegaon Dabhade, Pune- 410507
         </div>
-
-        {/* Swoosh Design */}
-        <svg style={{ position: 'absolute', bottom: 0, right: 0, zIndex: 0, width: '300px', height: '300px', pointerEvents: 'none' }} viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M400,400 L400,200 C300,250 150,300 0,400 Z" fill="#93c5fd" opacity="0.3" />
-          <path d="M400,400 L400,250 C250,280 100,350 0,400 Z" fill="#1e3a8a" opacity="0.9" />
-        </svg>
-
       </div>
     </div>
   );

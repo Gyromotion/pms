@@ -25,8 +25,14 @@ export default function PatientForm() {
   });
 
   useEffect(() => {
-    async function load() {
-      if (id) {
+    if (id) {
+      if (currentUser && currentUser.role !== 'admin') {
+        alert("Access Denied: Only Administrators can edit patient details.");
+        navigate(`/patients/${id}`);
+        return;
+      }
+      
+      const loadPatient = async () => {
         const existing = await getPatientById(id);
         if (existing) {
           // Map old 'condition' to 'diagnosis' if present
@@ -35,10 +41,10 @@ export default function PatientForm() {
           }
           setFormData(prev => ({...prev, ...existing}));
         }
-      }
+      };
+      loadPatient();
     }
-    load();
-  }, [id]);
+  }, [id, currentUser, navigate]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
