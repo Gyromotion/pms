@@ -32,22 +32,26 @@ export default function Invoice() {
 
   if (billMode === 'all' && patient.packageHistory) {
     patient.packageHistory.forEach((hist) => {
-      if (hist.packageDays === 'daily' && hist.sessions) {
-        hist.sessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: hist.diagnosis}));
-        allAttendance = [...allAttendance, ...hist.sessions];
-      } else if (hist.packageDays !== 'daily') {
-        billItems.push({...hist, isPackage: true});
-        if (hist.sessions) allAttendance = [...allAttendance, ...hist.sessions];
-      }
+        const activeHistSessions = (hist.sessions || []).filter(s => !s.isHidden);
+        if (activeHistSessions.length > 0) {
+          if (hist.packageDays === 'daily') {
+            activeHistSessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: patient.diagnosis}));
+          } else {
+            billItems.push({...hist, isPackage: true, isHistory: true});
+          }
+          allAttendance = [...allAttendance, ...activeHistSessions];
+        }
     });
   }
 
-  if (patient.packageDays === 'daily' && patient.sessions) {
-    patient.sessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: patient.diagnosis}));
-    allAttendance = [...allAttendance, ...patient.sessions];
+  const activeSessions = (patient.sessions || []).filter(s => !s.isHidden);
+
+  if (patient.packageDays === 'daily' && activeSessions.length > 0) {
+    activeSessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: patient.diagnosis}));
+    allAttendance = [...allAttendance, ...activeSessions];
   } else if (patient.packageDays !== 'daily') {
     billItems.push({...patient, isPackage: true});
-    if (patient.sessions) allAttendance = [...allAttendance, ...patient.sessions];
+    if (activeSessions.length > 0) allAttendance = [...allAttendance, ...activeSessions];
   }
 
   // Calculate totals and dates
@@ -132,7 +136,7 @@ export default function Invoice() {
           <div style={{ textAlign: 'right' }}>
             <div><strong style={{ color: '#0f172a' }}>Date:</strong> {dateRange}</div>
             {patient.packageDays !== 'daily' && (
-              <div><strong style={{ color: '#0f172a' }}>Sessions Completed:</strong> {patient.sessions?.length || 0} / {patient.packageDays}</div>
+              <div><strong style={{ color: '#0f172a' }}>Sessions Completed:</strong> {activeSessions.length} / {patient.packageDays}</div>
             )}
           </div>
         </div>

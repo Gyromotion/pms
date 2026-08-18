@@ -12,9 +12,9 @@ export default function PatientProfile() {
   const { currentUser } = useAuth();
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [expandedPackages, setExpandedPackages] = useState({});
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [renewType, setRenewType] = useState('renew'); // 'renew' or 'upgrade'
   
   // Session logging state
@@ -127,7 +127,7 @@ export default function PatientProfile() {
       if(window.confirm('Delete this session record?')) {
           const updatedPatient = {
               ...patient,
-              sessions: patient.sessions.filter(s => s.id !== sessionId)
+              sessions: patient.sessions.map(s => s.id === sessionId ? { ...s, isHidden: true } : s)
           };
           await savePatient(updatedPatient);
           setPatient(updatedPatient);
@@ -237,12 +237,14 @@ export default function PatientProfile() {
 
   if (!patient) return null;
 
-  const isDaily = patient.packageDays === 'daily';
-  const sessionsRemaining = isDaily ? null : Number(patient.packageDays) - patient.sessions.length;
+  // Calculate Package Info
+  const isDaily = patient?.packageDays === 'daily' || patient?.packageDays === 'per_session';
+  const activeSessions = patient?.sessions ? patient.sessions.filter(s => !s.isHidden) : [];
+  const sessionsRemaining = isDaily ? null : Number(patient?.packageDays) - activeSessions.length;
   const isCompleted = !isDaily && sessionsRemaining <= 0;
 
   const dailyTotalPaid = isDaily 
-    ? patient.sessions.reduce((sum, s) => sum + Number(s.amountPaid || 0), 0) + (patient.paymentReceived ? Number(patient.paymentAmount || 0) : 0)
+    ? activeSessions.reduce((sum, s) => sum + Number(s.amountPaid || 0), 0) + (patient.paymentReceived ? Number(patient.paymentAmount || 0) : 0)
     : 0;
 
   return (
@@ -269,7 +271,7 @@ export default function PatientProfile() {
         <div className="card glass-panel" style={{ gridColumn: 'span 2' }}>
           <div className="flex items-center gap-4 mb-6">
             <div className="p-4 bg-blue-50 rounded-full" style={{ backgroundColor: '#f1f5f9' }}>
-              <User size={40} className="text-muted" />
+              <div className="text-xl text-primary font-bold">₹{patient.paymentAmount || 0}</div>
             </div>
             <div>
               <h2 className="mb-1">{patient.name}</h2>
@@ -315,7 +317,7 @@ export default function PatientProfile() {
             </div>
             <div className="flex justify-between mb-1">
               <span className="text-muted text-sm">Attended</span>
-              <span style={{ fontWeight: '600' }}>{patient.sessions.length}</span>
+              <span style={{ fontWeight: '600' }}>{activeSessions.length}</span>
             </div>
             {!isDaily && (
               <div className="flex justify-between">
@@ -351,32 +353,21 @@ export default function PatientProfile() {
              )}
           </div>
 
-          <div className="mt-4 flex flex-col gap-2">
-            <div className="flex gap-2">
-              {isCompleted && !isDaily && (
-                <button 
-                  className="btn btn-primary flex-1 py-2 text-sm" 
-                  onClick={() => { setRenewType('renew'); setShowRenewModal(true); }}
-                >
-                  Renew Package
-                </button>
-              )}
-              {isDaily && (
-                <button 
-                  className="btn btn-secondary flex-1 py-2 text-sm"
-                  onClick={() => { setRenewType('upgrade'); setShowRenewModal(true); }}
-                >
-                  Upgrade to Package
-                </button>
-              )}
-            </div>
-            
-            {patient.packageHistory?.length > 0 && (
+          <div className="mt-4 flex gap-2">
+            {isCompleted && !isDaily && (
               <button 
-                className="btn btn-outline w-full py-2 text-sm"
-                onClick={() => setShowHistoryModal(true)}
+                className="btn btn-primary flex-1 py-2 text-sm" 
+                onClick={() => { setRenewType('renew'); setShowRenewModal(true); }}
               >
-                View Previous Package History ({patient.packageHistory.length})
+                Renew Package
+              </button>
+            )}
+            {isDaily && (
+              <button 
+                className="btn btn-secondary flex-1 py-2 text-sm"
+                onClick={() => { setRenewType('upgrade'); setShowRenewModal(true); }}
+              >
+                Upgrade to Package
               </button>
             )}
           </div>
@@ -501,7 +492,7 @@ export default function PatientProfile() {
         )}
 
         <h3 className="mb-4 text-muted text-sm uppercase">Attendance History</h3>
-        {patient.sessions.length > 0 ? (
+        {activeSessions.length > 0 ? (
           <div className="table-wrapper">
             <table>
               <thead>
@@ -513,12 +504,12 @@ export default function PatientProfile() {
                 </tr>
               </thead>
               <tbody>
-                {patient.sessions.sort((a,b) => new Date(b.date) - new Date(a.date)).map((session) => (
+                {activeSessions.sort((a,b) => new Date(b.date) - new Date(a.date)).map((session) => (
                   <tr key={session.id}>
                     <td style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>
                       <div className="flex items-center gap-2" style={{ fontWeight: '500' }}>
                         <Calendar size={14} className="text-muted" />
-                        {format(new Date(session.date), 'MMM dd, yyyy')}
+                        {session.date ? format(new Date(session.date), 'MMM dd, yyyy') : 'Unknown Date'}
                       </div>
                     </td>
                     <td>
@@ -575,6 +566,83 @@ export default function PatientProfile() {
         </div>
       )}
 
+      {/* Previous Packages List (Directly on page) */}
+      {patient.packageHistory?.length > 0 && (
+        <div className="card glass-panel mb-6 mt-6">
+          <h2 className="mb-4">Previous Packages History</h2>
+          <div className="flex flex-col gap-4">
+            {patient.packageHistory.map((hist, i) => {
+              const histId = hist.id || i;
+              const isExpanded = expandedPackages[histId];
+              const histActiveSessions = (hist.sessions || []).filter(s => !s.isHidden);
+              
+              return (
+              <div 
+                key={histId} 
+                style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', backgroundColor: '#f8fafc', cursor: 'pointer', transition: 'all 0.2s' }}
+                onClick={() => setExpandedPackages(prev => ({ ...prev, [histId]: !prev[histId] }))}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--primary-color)' }}>
+                      {hist.packageDays === 'daily' || hist.packageDays === 'per_session' ? 'Pay Per Session' : `${hist.packageDays} Sessions Package`}
+                    </h4>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      {hist.startDate ? format(new Date(hist.startDate), 'MMM dd, yyyy') : 'Unknown Date'} - {hist.endDate ? format(new Date(hist.endDate), 'MMM dd, yyyy') : 'Unknown Date'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: '600' }}>₹{hist.paymentAmount}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#059669' }}>{hist.paymentMethod}</div>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                  <span className="text-sm" style={{ color: '#64748b' }}>
+                    {histActiveSessions.length} Sessions Completed {isExpanded ? '(Click to collapse)' : '(Click to view sessions)'}
+                  </span>
+                  
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteHistory(histId); }}
+                    className="btn btn-outline text-danger" 
+                    style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem', border: '1px solid #fee2e2', color: '#ef4444', backgroundColor: '#fef2f2' }}
+                  >
+                    <Trash2 size={14} /> Delete Package
+                  </button>
+                </div>
+
+                {isExpanded && histActiveSessions.length > 0 && (
+                  <div className="mt-4" onClick={e => e.stopPropagation()}>
+                    <h5 className="mb-2 text-sm uppercase text-muted">Sessions in this package</h5>
+                    <div className="table-wrapper">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Protocol & Exercises</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {histActiveSessions.sort((a,b) => new Date(b.date) - new Date(a.date)).map(s => (
+                            <tr key={s.id}>
+                              <td style={{ whiteSpace: 'nowrap' }}>{s.date ? format(new Date(s.date), 'MMM dd, yyyy') : 'Unknown Date'}</td>
+                              <td>
+                                {s.protocol && <div style={{fontWeight: '600', fontSize: '0.85rem', color: 'var(--primary-hover)'}}>{s.protocol}</div>}
+                                <div className="text-sm">{s.exercises}</div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )})}
+          </div>
+        </div>
+      )}
+
       {showRenewModal && createPortal(
         <div className="modal-overlay" onClick={() => setShowRenewModal(false)}>
           <div className="modal-content p-6" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
@@ -582,7 +650,7 @@ export default function PatientProfile() {
             
             <div style={{ border: '1px solid var(--primary-color)', backgroundColor: '#eff6ff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
               <p className="text-sm" style={{ color: '#1e3a8a', margin: 0 }}>
-                <strong>Note:</strong> This will safely archive all {patient.sessions?.length} past sessions into the patient's history and start a fresh package from today.
+                <strong>Note:</strong> This will safely archive all {activeSessions.length} past sessions into the patient's history and start a fresh package from today.
               </p>
             </div>
             
@@ -638,57 +706,6 @@ export default function PatientProfile() {
         document.body
       )}
 
-      {/* Package History Modal */}
-      {showHistoryModal && createPortal(
-        <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}>
-          <div className="modal-content p-6" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto' }}>
-            <h2 className="mb-6 flex justify-between items-center">
-              <span>Past Packages Archive</span>
-              <button className="btn btn-outline" style={{ padding: '4px 8px' }} onClick={() => setShowHistoryModal(false)}>Close</button>
-            </h2>
-            
-            {patient.packageHistory?.length > 0 ? (
-              <div className="flex flex-col gap-4">
-                {patient.packageHistory.map((hist, i) => (
-                  <div key={hist.id || i} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', backgroundColor: '#f8fafc' }}>
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 style={{ margin: '0 0 4px 0', color: 'var(--primary-color)' }}>
-                          {hist.packageDays === 'daily' || hist.packageDays === 'per_session' ? 'Pay Per Session' : `${hist.packageDays} Sessions Package`}
-                        </h4>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          {format(new Date(hist.startDate), 'MMM dd, yyyy')} - {format(new Date(hist.endDate), 'MMM dd, yyyy')}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: '600' }}>₹{hist.paymentAmount}</div>
-                        <div style={{ fontSize: '0.8rem', color: '#059669' }}>{hist.paymentMethod}</div>
-                      </div>
-                    </div>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
-                      <span className="text-sm" style={{ color: '#64748b' }}>
-                        {hist.sessions?.length || 0} Sessions Completed
-                      </span>
-                      
-                      <button 
-                        onClick={() => handleDeleteHistory(hist.id || i)}
-                        className="btn btn-outline text-danger" 
-                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem', border: '1px solid #fee2e2', color: '#ef4444', backgroundColor: '#fef2f2' }}
-                      >
-                        <Trash2 size={14} /> Delete Archive
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted">No past packages found.</p>
-            )}
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
