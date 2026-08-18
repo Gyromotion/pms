@@ -16,6 +16,7 @@ export default function PatientProfile() {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [renewType, setRenewType] = useState('renew'); // 'renew' or 'upgrade'
+  const [renewDate, setRenewDate] = useState(new Date().toISOString().split('T')[0]);
   
   // Session logging state
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
@@ -134,6 +135,23 @@ export default function PatientProfile() {
       }
   }
 
+  const handleDeleteHistorySession = async (historyId, sessionId) => {
+    if(window.confirm('Delete this session record from history?')) {
+      const updatedHistory = patient.packageHistory.map(hist => {
+        if (hist.id === historyId) {
+          return {
+            ...hist,
+            sessions: hist.sessions.map(s => s.id === sessionId ? { ...s, isHidden: true } : s)
+          };
+        }
+        return hist;
+      });
+      const updatedPatient = { ...patient, packageHistory: updatedHistory, lastEditedBy: currentUser?.name };
+      await savePatient(updatedPatient);
+      setPatient(updatedPatient);
+    }
+  };
+
   const handleRenewPackage = async (e) => {
     e.preventDefault();
     if (!category || !subCategory || !pkgType) return alert('Please select a complete package.');
@@ -145,7 +163,7 @@ export default function PatientProfile() {
     const historyEntry = {
       id: Date.now().toString(),
       startDate: patient.startDate,
-      endDate: new Date().toISOString(),
+      endDate: new Date(renewDate).toISOString(),
       packageDays: patient.packageDays,
       paymentAmount: patient.paymentAmount,
       paymentMethod: patient.paymentMethod,
@@ -159,7 +177,7 @@ export default function PatientProfile() {
       paymentAmount: sessionPrice,
       paymentMethod: sessionPaymentMethod,
       paymentReceived: true,
-      startDate: new Date().toISOString(),
+      startDate: new Date(renewDate).toISOString(),
       sessions: [], // Reset sessions
       packageHistory: [...(patient.packageHistory || []), historyEntry],
       lastEditedBy: currentUser?.name
@@ -620,15 +638,38 @@ export default function PatientProfile() {
                           <tr>
                             <th>Date</th>
                             <th>Protocol & Exercises</th>
+                            {(hist.packageDays === 'daily' || hist.packageDays === 'per_session') && <th>Payment</th>}
+                            <th style={{width: '60px'}}></th>
                           </tr>
                         </thead>
                         <tbody>
                           {histActiveSessions.sort((a,b) => new Date(b.date) - new Date(a.date)).map(s => (
                             <tr key={s.id}>
-                              <td style={{ whiteSpace: 'nowrap' }}>{s.date ? format(new Date(s.date), 'MMM dd, yyyy') : 'Unknown Date'}</td>
+                              <td style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                                <div className="flex items-center gap-2" style={{ fontWeight: '500' }}>
+                                  <Calendar size={14} className="text-muted" />
+                                  {s.date ? format(new Date(s.date), 'MMM dd, yyyy') : 'Unknown Date'}
+                                </div>
+                              </td>
                               <td>
-                                {s.protocol && <div style={{fontWeight: '600', fontSize: '0.85rem', color: 'var(--primary-hover)'}}>{s.protocol}</div>}
+                                {s.protocol && <div style={{fontWeight: '600', marginBottom: '0.25rem', fontSize: '0.8rem', color: 'var(--primary-hover)'}}>{s.protocol}</div>}
                                 <div className="text-sm">{s.exercises}</div>
+                                {s.loggedBy && <div className="text-xs text-muted mt-1">Logged by: {s.loggedBy}</div>}
+                              </td>
+                              {(hist.packageDays === 'daily' || hist.packageDays === 'per_session') && (
+                                <td style={{ verticalAlign: 'top' }}>
+                                  {s.amountPaid ? (
+                                    <>
+                                      <div style={{ fontWeight: '600', color: 'var(--success)' }}>₹{s.amountPaid}</div>
+                                      <div className="text-xs text-muted">{s.paymentMethod || 'Cash'}</div>
+                                    </>
+                                  ) : '-'}
+                                </td>
+                              )}
+                              <td style={{ verticalAlign: 'top' }}>
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteHistorySession(histId, s.id); }} style={{background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer'}}>
+                                    <Trash2 size={16} />
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -655,13 +696,17 @@ export default function PatientProfile() {
             </div>
             
             <form onSubmit={handleRenewPackage}>
+              <div className="form-group mb-4">
+                <label className="form-label">Effective Date</label>
+                <input type="date" className="form-control" value={renewDate} onChange={e => setRenewDate(e.target.value)} required />
+              </div>
+              
               <div className="form-group">
                 <label className="form-label">Select New Package Duration</label>
-                <select className="form-control" value={pkgType} onChange={e => setPkgType(e.target.value)} required>
+                <select className="form-control" value={pkgType} onChange={e => { setPkgType(e.target.value); setCategory(''); setSubCategory(''); }} required>
                   <option value="">-- Select --</option>
-                  <option value="per_session">Pay Daily (Per Session)</option>
-                  <option value="12">2 Weeks Package (12 Sessions)</option>
-                  <option value="25">4 Weeks Package (25 Sessions)</option>
+                  <option value="per_session">Pay Per Session (Daily)</option>
+                  {packages.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
               </div>
 
