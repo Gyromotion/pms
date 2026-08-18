@@ -62,12 +62,25 @@ export default function Invoice() {
     }
   }
 
+  const handlePrint = () => {
+    // Remove focus from the button so CSS active/focus states don't cause layout thrashing
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    // Double requestAnimationFrame guarantees the browser has fully painted the neutral state
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print();
+      });
+    });
+  };
+
   return (
     <div className="invoice-container">
       {/* Non-printable back button */}
       <div className="no-print" style={{ padding: '20px', textAlign: 'center', marginBottom: '20px' }}>
         <button className="btn btn-outline mr-4" style={{ marginRight: '1rem' }} onClick={() => navigate(-1)}>Back to Profile</button>
-        <button className="btn btn-primary" onClick={() => window.print()}>Print / Save as PDF</button>
+        <button className="btn btn-primary" onClick={handlePrint}>Print / Save as PDF</button>
       </div>
 
       {/* Strict A4 Container */}
