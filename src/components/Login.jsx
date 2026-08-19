@@ -141,6 +141,15 @@ export default function Login() {
           )}
         </div>
       </div>
+
+      <footer style={{ 
+        textAlign: 'center', 
+        padding: '1.5rem 1rem', 
+        color: 'var(--text-muted)', 
+        fontSize: '0.85rem' 
+      }}>
+        &copy; {new Date().getFullYear()} Gyromotion Physiotherapy Clinic &bull; Created by <strong>Pratham Joshi</strong>
+      </footer>
     </div>
   );
 }
