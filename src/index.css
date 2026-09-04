@@ -280,6 +280,10 @@ tr:hover td {
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebar-header {

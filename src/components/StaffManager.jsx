@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, query, where, orderBy, limit } from 'firebase/firestore';
 import { adminAuth, createUserWithEmailAndPassword } from '../lib/adminAuth';
-import { Shield, UserPlus, History, Compass } from 'lucide-react';
+import { Shield, UserPlus, History, Compass, MoreVertical } from 'lucide-react';
 
 export default function StaffManager() {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeDropdown, setActiveDropdown] = useState(null);
   
   // Form state
   const [name, setName] = useState('');
@@ -221,33 +222,45 @@ export default function StaffManager() {
                             {user.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td>
-                          <div className="flex gap-2 flex-wrap">
-                            <button onClick={() => handleViewLogs(user)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', color: '#6366f1', borderColor: '#6366f1' }}>
-                              <History size={14} style={{ display: 'inline', marginRight: '4px' }} /> View Logins
-                            </button>
-                            <button onClick={() => handleTriggerTour(user)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', color: '#10b981', borderColor: '#10b981' }}>
-                              <Compass size={14} style={{ display: 'inline', marginRight: '4px' }} /> Tour
-                            </button>
-                            {user.email !== 'gyromotion.physio@gmail.com' && (
-                              <>
-                                <button onClick={() => handleEditClick(user)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>
-                                  Edit
+                        <td style={{ position: 'relative' }}>
+                          <button onClick={() => setActiveDropdown(activeDropdown === user.id ? null : user.id)} className="btn btn-outline" style={{ padding: '0.25rem', border: 'none', background: 'transparent' }}>
+                            <MoreVertical size={20} />
+                          </button>
+                          
+                          {activeDropdown === user.id && (
+                            <>
+                              <div 
+                                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 90 }} 
+                                onClick={() => setActiveDropdown(null)}
+                              />
+                              <div style={{ position: 'absolute', right: '100%', top: '0', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.25rem', display: 'flex', flexDirection: 'column', zIndex: 100, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', minWidth: '150px' }}>
+                                <button onClick={() => { setActiveDropdown(null); handleViewLogs(user); }} className="btn" style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#6366f1', background: 'none', textAlign: 'left', justifyContent: 'flex-start', border: 'none' }}>
+                                  <History size={14} style={{ display: 'inline', marginRight: '4px' }} /> View Logins
                                 </button>
-                                {user.role !== 'admin' && (
-                                  <button onClick={() => handleToggleActive(user)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>
-                                    {user.isActive ? 'Deactivate' : 'Activate'}
-                                  </button>
+                                <button onClick={() => { setActiveDropdown(null); handleTriggerTour(user); }} className="btn" style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#10b981', background: 'none', textAlign: 'left', justifyContent: 'flex-start', border: 'none' }}>
+                                  <Compass size={14} style={{ display: 'inline', marginRight: '4px' }} /> Tour
+                                </button>
+                                {user.email !== 'gyromotion.physio@gmail.com' && (
+                                  <>
+                                    <button onClick={() => { setActiveDropdown(null); handleEditClick(user); }} className="btn" style={{ padding: '0.5rem', fontSize: '0.8rem', background: 'none', textAlign: 'left', justifyContent: 'flex-start', border: 'none' }}>
+                                      Edit
+                                    </button>
+                                    {user.role !== 'admin' && (
+                                      <button onClick={() => { setActiveDropdown(null); handleToggleActive(user); }} className="btn" style={{ padding: '0.5rem', fontSize: '0.8rem', background: 'none', textAlign: 'left', justifyContent: 'flex-start', border: 'none' }}>
+                                        {user.isActive ? 'Deactivate' : 'Activate'}
+                                      </button>
+                                    )}
+                                    <button onClick={() => { setActiveDropdown(null); handleToggleRole(user); }} className="btn" style={{ padding: '0.5rem', fontSize: '0.8rem', background: 'none', textAlign: 'left', justifyContent: 'flex-start', border: 'none' }}>
+                                      {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                                    </button>
+                                    <button onClick={() => { setActiveDropdown(null); handleDeleteStaff(user); }} className="btn" style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#ef4444', background: 'none', textAlign: 'left', justifyContent: 'flex-start', border: 'none' }}>
+                                      Delete
+                                    </button>
+                                  </>
                                 )}
-                                <button onClick={() => handleToggleRole(user)} className={`btn ${user.role === 'admin' ? 'btn-secondary' : 'btn-outline'}`} style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>
-                                  {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
-                                </button>
-                                <button onClick={() => handleDeleteStaff(user)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', color: '#ef4444', borderColor: '#ef4444' }}>
-                                  Delete
-                                </button>
-                              </>
-                            )}
-                          </div>
+                              </div>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}
