@@ -213,7 +213,7 @@ export default function StaffManager() {
                   </thead>
                   <tbody>
                     {staff.map(user => (
-                      <tr key={user.id}>
+                      <tr key={user.id} style={{ backgroundColor: user.isActive ? 'transparent' : 'rgba(239, 68, 68, 0.1)' }}>
                         <td style={{ fontWeight: '500' }}>{user.name}</td>
                         <td className="text-muted">{user.email}</td>
                         <td><span className="badge" style={{ backgroundColor: user.role === 'admin' ? '#fef3c7' : '#e0e7ff', color: user.role === 'admin' ? '#d97706' : '#4338ca', textTransform: 'capitalize' }}>{user.role === 'worker' ? 'Doctor' : user.role}</span></td>
