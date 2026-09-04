@@ -69,6 +69,15 @@ export default function PatientProfile() {
     const data = await getPatientById(id);
     if (data) {
       if (data.condition && !data.diagnosis) data.diagnosis = data.condition;
+      
+      // Auto-heal corrupt package data from old bug
+      let needsSave = false;
+      if (data.packageDays === '4_weeks') { data.packageDays = '25'; needsSave = true; }
+      else if (data.packageDays === '2_weeks') { data.packageDays = '12'; needsSave = true; }
+      else if (data.packageDays === 'per_session') { data.packageDays = 'daily'; needsSave = true; }
+      
+      if (needsSave) savePatient(data); // Silently heal in background
+      
       setPatient(data);
     } else {
       navigate('/patients');
@@ -159,6 +168,12 @@ export default function PatientProfile() {
 
     const isUpgrade = renewType === 'upgrade';
     
+    // Map package keys to the legacy numeric values
+    let mappedPackageDays = pkgType;
+    if (pkgType === '2_weeks') mappedPackageDays = '12';
+    else if (pkgType === '4_weeks') mappedPackageDays = '25';
+    else if (pkgType === 'per_session') mappedPackageDays = 'daily';
+    
     // Archive current package into history
     const historyEntry = {
       id: Date.now().toString(),
@@ -173,7 +188,7 @@ export default function PatientProfile() {
 
     const updatedPatient = {
       ...patient,
-      packageDays: pkgType,
+      packageDays: mappedPackageDays,
       paymentAmount: sessionPrice,
       paymentMethod: sessionPaymentMethod,
       paymentReceived: true,
