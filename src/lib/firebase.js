@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -15,8 +15,8 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// Enable offline persistence for instant loading
-enableIndexedDbPersistence(db).catch((err) => {
+// Enable multi-tab offline persistence for instant loading across tabs
+enableMultiTabIndexedDbPersistence(db).catch((err) => {
   console.log("Firebase persistence error:", err.code);
 });
 
