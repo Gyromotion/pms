@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, doc, setDoc, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, orderBy, limit } from 'firebase/firestore';
 import { adminAuth, createUserWithEmailAndPassword } from '../lib/adminAuth';
 import { Shield, UserPlus, History, Compass } from 'lucide-react';
 
@@ -151,6 +151,18 @@ export default function StaffManager() {
     }
   };
 
+  const handleDeleteStaff = async (user) => {
+    if (window.confirm(`DANGER: Are you absolutely sure you want to permanently delete ${user.name}? This cannot be undone.`)) {
+      try {
+        await deleteDoc(doc(db, 'users', user.id));
+        loadStaff();
+      } catch(e) {
+        console.error(e);
+        alert('Error deleting staff. You may not have sufficient permissions.');
+      }
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
@@ -229,6 +241,9 @@ export default function StaffManager() {
                                 )}
                                 <button onClick={() => handleToggleRole(user)} className={`btn ${user.role === 'admin' ? 'btn-secondary' : 'btn-outline'}`} style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>
                                   {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                                </button>
+                                <button onClick={() => handleDeleteStaff(user)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', color: '#ef4444', borderColor: '#ef4444' }}>
+                                  Delete
                                 </button>
                               </>
                             )}

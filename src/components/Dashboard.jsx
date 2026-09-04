@@ -20,7 +20,11 @@ export default function Dashboard() {
     async function loadData() {
       setLoading(true);
       try {
-        const data = await getDashboardStats(selectedMonth, selectedYear);
+        const [data, apts] = await Promise.all([
+          getDashboardStats(selectedMonth, selectedYear),
+          getAppointments()
+        ]);
+        
         setStats({
           totalPatients: data.totalPatients,
           activePatients: data.activePatients,
@@ -31,7 +35,6 @@ export default function Dashboard() {
         setRecentPatients(data.patients.sort((a, b) => Number(b.id) - Number(a.id)).slice(0, 5));
 
         // Get Next Patient
-        const apts = await getAppointments();
         const now = new Date();
         const futureApts = apts.filter(a => new Date(a.datetime) >= now).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
         if (futureApts.length > 0) {

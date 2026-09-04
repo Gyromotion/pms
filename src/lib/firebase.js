@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -14,4 +14,10 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+// Enable offline persistence for instant loading
+enableIndexedDbPersistence(db).catch((err) => {
+  console.log("Firebase persistence error:", err.code);
+});
+
 export const auth = getAuth(app);
