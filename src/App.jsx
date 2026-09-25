@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Activity, Users, LayoutDashboard, Settings, Calendar, LogOut, Shield, Menu, X } from 'lucide-react';
+import { Activity, Users, LayoutDashboard, Settings, Calendar, LogOut, Shield, Menu, X , Apple } from 'lucide-react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -23,6 +23,7 @@ function Sidebar({ isOpen, setIsOpen }) {
     { path: '/', label: 'Overview', icon: <LayoutDashboard size={20} /> },
     { path: '/patients', label: 'Patients', icon: <Users size={20} /> },
     { path: '/appointments', label: 'Appointments', icon: <Calendar size={20} /> },
+    { path: 'https://gyromotion-nutriplan-ai.vercel.app', label: 'NutriPlan AI', icon: <Apple size={20} />, external: true },
   ];
 
   if (currentUser?.role === 'admin') {
@@ -47,17 +48,34 @@ function Sidebar({ isOpen, setIsOpen }) {
         </div>
       </div>
       <nav className="sidebar-nav" style={{ flex: 1 }}>
-        {navItems.map((item) => (
-          <Link 
-            key={item.path} 
-            to={item.path} 
-            onClick={() => setIsOpen(false)}
-            className={`nav-item ${location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path)) ? 'active' : ''}`}
-          >
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
+        {navItems.map((item) => {
+          if (item.external) {
+            return (
+              <a 
+                key={item.path}
+                href={item.path}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="nav-item"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', color: 'var(--text-secondary)', textDecoration: 'none', borderRadius: '0.5rem', transition: 'all 0.2s', fontWeight: 500 }}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </a>
+            );
+          }
+          return (
+            <Link 
+              key={item.path} 
+              to={item.path} 
+              onClick={() => setIsOpen(false)}
+              className={`nav-item ${location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path)) ? 'active' : ''}`}
+            >
+              {item.icon}
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
       <div className="sidebar-footer" style={{ padding: '1rem', borderTop: '1px solid rgba(0,0,0,0.05)', marginTop: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', padding: '0 0.5rem' }}>
