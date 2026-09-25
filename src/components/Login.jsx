@@ -74,6 +74,7 @@ export default function Login() {
         <a href="https://gyromotionphysio.in/services.html" style={{ color: 'var(--text-color)', fontWeight: '600', textDecoration: 'none', fontSize: '0.9rem', letterSpacing: '0.05em' }}>SERVICES</a>
         <a href="https://gyromotionphysio.in/appointment.html" style={{ color: 'var(--text-color)', fontWeight: '600', textDecoration: 'none', fontSize: '0.9rem', letterSpacing: '0.05em' }}>BOOK AN APPOINTMENT</a>
         <a href="https://gyromotionphysio.in/pms/" style={{ color: 'var(--primary-color)', fontWeight: '700', textDecoration: 'none', fontSize: '0.9rem', letterSpacing: '0.05em' }}>PMS</a>
+        <a href="https://gyromotion-nutriplan-ai.vercel.app" target="_blank" style={{ color: 'var(--text-color)', fontWeight: '600', textDecoration: 'none', fontSize: '0.9rem', letterSpacing: '0.05em' }}>NUTRIPLAN AI</a>
       </nav>
 
       <div style={{ display: 'flex', flex: 1, justifyContent: 'center', alignItems: 'center', padding: '2rem' }}>
