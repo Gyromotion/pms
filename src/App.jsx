@@ -23,7 +23,7 @@ function Sidebar({ isOpen, setIsOpen }) {
     { path: '/', label: 'Overview', icon: <LayoutDashboard size={20} /> },
     { path: '/patients', label: 'Patients', icon: <Users size={20} /> },
     { path: '/appointments', label: 'Appointments', icon: <Calendar size={20} /> },
-    { path: 'https://gyromotion-nutriplan-ai.vercel.app', label: 'NutriPlan AI', icon: <Apple size={20} />, external: true },
+    { path: 'https://gyromotion-nutriplan-ai.vercel.app', label: 'NutriPlan', icon: <Apple size={20} />, external: true },
   ];
 
   if (currentUser?.role === 'admin') {
