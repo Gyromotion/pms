@@ -44,34 +44,82 @@ export const getDashboardStats = async (targetMonth = new Date().getMonth(), tar
   const patients = await getPatients();
   const totalPatients = patients.length;
   
+  const isDailyPatient = (p) => p.packageDays === 'daily' || p.packageDays === 'per_session';
+
   // Active patients are those who haven't finished their package (excluding daily)
-  const activePatients = patients.filter(p => p.packageDays !== 'daily' && p.sessions && p.sessions.length < Number(p.packageDays)).length;
+  const activePatients = patients.filter(p => {
+    if (isDailyPatient(p)) return false;
+    const activeSessions = (p.sessions || []).filter(s => !s.isHidden);
+    return activeSessions.length < Number(p.packageDays);
+  }).length;
   
-  const isCurrentMonth = (dateString) => {
+  const isTargetMonth = (dateString) => {
     if (!dateString) return false;
     const d = new Date(dateString);
+    if (isNaN(d.getTime())) return false;
     return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
   };
 
   const totalRevenue = patients.reduce((sum, p) => {
     let patientTotal = 0;
-    
-    // For packages, check if the package was started this month
-    if (p.paymentReceived && p.packageDays !== 'daily') {
-      if (isCurrentMonth(p.startDate)) {
-        patientTotal += Number(p.paymentAmount || 0);
-      }
-    }
+    const isDaily = isDailyPatient(p);
 
-    // For daily pay, check each session date
-    if (p.packageDays === 'daily' && p.sessions) {
-      const sessionTotal = p.sessions.reduce((sSum, s) => {
-        if (isCurrentMonth(s.date)) {
+    if (isDaily) {
+      // 1. Daily session payments (only active, non-hidden sessions)
+      const activeSessions = (p.sessions || []).filter(s => !s.isHidden);
+      const sessionTotal = activeSessions.reduce((sSum, s) => {
+        if (isTargetMonth(s.date)) {
           return sSum + Number(s.amountPaid || 0);
         }
         return sSum;
       }, 0);
       patientTotal += sessionTotal;
+
+      // 2. Initial payment for daily: if patient paid initial amount at registration
+      // and has NO active sessions yet (prevents double-counting when first session is logged)
+      if (p.paymentReceived && activeSessions.length === 0) {
+        const pDate = p.paymentDate || p.startDate;
+        if (isTargetMonth(pDate)) {
+          patientTotal += Number(p.paymentAmount || 0);
+        }
+      }
+    } else {
+      // Package patient:
+      // Current package payment: check paymentDate, fallback to startDate
+      if (p.paymentReceived) {
+        const pDate = p.paymentDate || p.startDate;
+        if (isTargetMonth(pDate)) {
+          patientTotal += Number(p.paymentAmount || 0);
+        }
+      }
+
+      // Any additional session payments made during package (non-hidden)
+      const activeSessions = (p.sessions || []).filter(s => !s.isHidden);
+      activeSessions.forEach(s => {
+        if (s.amountPaid && Number(s.amountPaid) > 0 && isTargetMonth(s.date)) {
+          patientTotal += Number(s.amountPaid);
+        }
+      });
+    }
+
+    // 3. Package History renewals:
+    if (p.packageHistory && p.packageHistory.length > 0) {
+      p.packageHistory.forEach(hist => {
+        const isHistDaily = hist.packageDays === 'daily' || hist.packageDays === 'per_session';
+        if (isHistDaily) {
+          const histActiveSessions = (hist.sessions || []).filter(s => !s.isHidden);
+          histActiveSessions.forEach(s => {
+            if (isTargetMonth(s.date)) {
+              patientTotal += Number(s.amountPaid || 0);
+            }
+          });
+        } else {
+          const histDate = hist.paymentDate || hist.startDate || hist.endDate;
+          if (hist.paymentAmount && isTargetMonth(histDate)) {
+            patientTotal += Number(hist.paymentAmount || 0);
+          }
+        }
+      });
     }
     
     return sum + patientTotal;

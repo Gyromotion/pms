@@ -1,23 +1,32 @@
 import { useState, useEffect } from 'react';
 import { getPatients } from '../lib/storage';
-import { Download, FileSpreadsheet, Activity, DollarSign } from 'lucide-react';
+import { Download, FileSpreadsheet, Activity, DollarSign, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function DataExport() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    async function load() {
+  const loadData = async () => {
+    setRefreshing(true);
+    try {
       const data = await getPatients();
       setPatients(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-    load();
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   const getMonthlyData = () => {
@@ -25,57 +34,91 @@ export default function DataExport() {
     let upiTotal = 0;
     const rows = [];
 
+    const isDailyPatient = (p) => p.packageDays === 'daily' || p.packageDays === 'per_session';
+
     const isCurrentMonth = (dateString) => {
       if (!dateString) return false;
       const d = new Date(dateString);
+      if (isNaN(d.getTime())) return false;
       return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
     };
 
     patients.forEach(p => {
-      // Package payments
-      if (p.packageDays !== 'daily' && p.paymentReceived && isCurrentMonth(p.startDate)) {
-        const amt = Number(p.paymentAmount || 0);
-        if (p.paymentMethod === 'Cash') cashTotal += amt;
-        else upiTotal += amt;
+      const isDaily = isDailyPatient(p);
 
-        rows.push({
-          date: format(new Date(p.startDate), 'dd/MM/yyyy'),
-          patientName: p.name,
-          phone: p.phone,
-          regNo: p.regNo || '',
-          diagnosis: p.diagnosis || 'N/A',
-          type: `${p.packageDays} Days Package`,
-          amount: amt,
-          method: p.paymentMethod || 'UPI'
-        });
+      // Package payments
+      if (!isDaily && p.paymentReceived) {
+        const pDate = p.paymentDate || p.startDate;
+        if (isCurrentMonth(pDate)) {
+          const amt = Number(p.paymentAmount || 0);
+          if (p.paymentMethod === 'Cash') cashTotal += amt;
+          else upiTotal += amt;
+
+          rows.push({
+            date: format(new Date(pDate), 'dd/MM/yyyy'),
+            patientName: p.name,
+            phone: p.phone,
+            regNo: p.regNo || '',
+            diagnosis: p.diagnosis || 'N/A',
+            type: `${p.packageDays} Days Package`,
+            amount: amt,
+            method: p.paymentMethod || 'UPI'
+          });
+        }
       }
 
       // Package History payments
       if (p.packageHistory && p.packageHistory.length > 0) {
         p.packageHistory.forEach(hist => {
-          if (hist.paymentAmount && hist.paymentMethod && isCurrentMonth(hist.startDate)) {
-             const amt = Number(hist.paymentAmount || 0);
-             if (hist.paymentMethod === 'Cash') cashTotal += amt;
-             else upiTotal += amt;
+          const isHistDaily = isDailyPatient(hist);
+          if (!isHistDaily && hist.paymentAmount) {
+             const histDate = hist.paymentDate || hist.startDate || hist.endDate;
+             if (isCurrentMonth(histDate)) {
+               const amt = Number(hist.paymentAmount || 0);
+               const method = hist.paymentMethod || 'UPI';
+               if (method === 'Cash') cashTotal += amt;
+               else upiTotal += amt;
 
-             rows.push({
-                date: format(new Date(hist.startDate), 'dd/MM/yyyy'),
-                patientName: p.name,
-                phone: p.phone,
-                regNo: p.regNo || '',
-                diagnosis: hist.diagnosis || p.diagnosis || 'N/A',
-                type: `${hist.packageDays} Days Package`,
-                amount: amt,
-                method: hist.paymentMethod || 'UPI'
-             });
+               rows.push({
+                  date: format(new Date(histDate), 'dd/MM/yyyy'),
+                  patientName: p.name,
+                  phone: p.phone,
+                  regNo: p.regNo || '',
+                  diagnosis: hist.diagnosis || p.diagnosis || 'N/A',
+                  type: `${hist.packageDays} Days Package (Renewal)`,
+                  amount: amt,
+                  method: method
+               });
+             }
+          }
+          if (isHistDaily && hist.sessions) {
+            hist.sessions.forEach(s => {
+              if (!s.isHidden && isCurrentMonth(s.date) && s.amountPaid) {
+                const amt = Number(s.amountPaid || 0);
+                const method = s.paymentMethod || 'UPI';
+                if (method === 'Cash') cashTotal += amt;
+                else upiTotal += amt;
+
+                rows.push({
+                  date: format(new Date(s.date), 'dd/MM/yyyy'),
+                  patientName: p.name,
+                  phone: p.phone,
+                  regNo: p.regNo || '',
+                  diagnosis: s.protocol || p.diagnosis || 'N/A',
+                  type: 'Per Session',
+                  amount: amt,
+                  method: method
+                });
+              }
+            });
           }
         });
       }
 
       // Daily sessions
-      if (p.packageDays === 'daily' && p.sessions) {
+      if (isDaily && p.sessions) {
         p.sessions.forEach(s => {
-          if (isCurrentMonth(s.date)) {
+          if (!s.isHidden && isCurrentMonth(s.date)) {
             const amt = Number(s.amountPaid || 0);
             const method = s.paymentMethod || 'UPI';
             if (method === 'Cash') cashTotal += amt;
@@ -93,6 +136,29 @@ export default function DataExport() {
             });
           }
         });
+
+        // Initial payment for daily with 0 sessions
+        const activeSessions = p.sessions.filter(s => !s.isHidden);
+        if (p.paymentReceived && activeSessions.length === 0) {
+          const pDate = p.paymentDate || p.startDate;
+          if (isCurrentMonth(pDate)) {
+            const amt = Number(p.paymentAmount || 0);
+            const method = p.paymentMethod || 'UPI';
+            if (method === 'Cash') cashTotal += amt;
+            else upiTotal += amt;
+
+            rows.push({
+              date: format(new Date(pDate), 'dd/MM/yyyy'),
+              patientName: p.name,
+              phone: p.phone,
+              regNo: p.regNo || '',
+              diagnosis: p.diagnosis || 'N/A',
+              type: 'Initial Consultation',
+              amount: amt,
+              method: method
+            });
+          }
+        }
       }
     });
 
@@ -151,15 +217,25 @@ export default function DataExport() {
           <h1 className="flex items-center gap-3 mb-2"><FileSpreadsheet size={28} className="text-primary" /> Reports & Data Export</h1>
           <p className="text-muted">Analyze financial data and export statements securely.</p>
         </div>
-        <div className="flex gap-4">
-          <select className="form-control mb-0" style={{ width: '150px' }} value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
+        <div className="flex gap-3 items-center">
+          <select className="form-control mb-0" style={{ width: '140px' }} value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
             {Array.from({ length: 12 }, (_, i) => (
               <option key={i} value={i}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>
             ))}
           </select>
-          <select className="form-control mb-0" style={{ width: '120px' }} value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
+          <select className="form-control mb-0" style={{ width: '100px' }} value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
             {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
+          <button 
+            onClick={loadData} 
+            disabled={refreshing}
+            className="btn btn-outline flex items-center gap-2"
+            style={{ padding: '0.45rem 0.75rem', fontSize: '0.875rem' }}
+            title="Refresh Reports"
+          >
+            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
       </div>
 

@@ -64,6 +64,11 @@ export default function PatientForm() {
       }
       patientData.lastEditedBy = currentUser?.name;
 
+      // Track when payment was received so it reflects in the right month's revenue
+      if (patientData.paymentReceived && !patientData.paymentDate) {
+        patientData.paymentDate = new Date().toISOString();
+      }
+
       await savePatient(patientData);
       navigate('/patients');
     } catch (error) {
@@ -132,8 +137,16 @@ export default function PatientForm() {
           </div>
           
           <div className="form-group mb-0">
-            <label className="form-label">Payment Amount (₹)</label>
-            <input type="number" name="paymentAmount" className="form-control" required value={formData.paymentAmount} onChange={handleChange} />
+            <label className="form-label">{formData.packageDays === 'daily' ? 'Per Session / Initial Amount (₹)' : 'Package Amount (₹)'}</label>
+            <input 
+              type="number" 
+              name="paymentAmount" 
+              className="form-control" 
+              required={formData.packageDays !== 'daily'} 
+              placeholder={formData.packageDays === 'daily' ? 'e.g. 500 (or leave 0)' : 'e.g. 3500'}
+              value={formData.paymentAmount} 
+              onChange={handleChange} 
+            />
           </div>
         </div>
 

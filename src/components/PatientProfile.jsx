@@ -24,6 +24,7 @@ export default function PatientProfile() {
   const [protocolText, setProtocolText] = useState('');
   const [sessionPrice, setSessionPrice] = useState('');
   const [sessionPaymentMethod, setSessionPaymentMethod] = useState('UPI');
+  const [markingSession, setMarkingSession] = useState(false);
   
   // Pricing matrix state
   const [pkgType, setPkgType] = useState('per_session');
@@ -99,38 +100,62 @@ export default function PatientProfile() {
   };
 
   const handleMarkSession = async () => {
+    if (markingSession) return;
     if (!exerciseText.trim()) {
       alert("Please enter the exercises performed during this session.");
       return;
     }
     
-    if (patient.packageDays !== 'daily' && patient.sessions.length >= Number(patient.packageDays)) {
+    if (patient.packageDays !== 'daily' && patient.packageDays !== 'per_session' && patient.sessions.length >= Number(patient.packageDays)) {
       alert("This package has already been completed.");
       return;
     }
 
-    const newSession = {
-      id: Date.now().toString(),
-      date: new Date(sessionDate).toISOString(),
-      exercises: exerciseText,
-      protocol: protocolText,
-      amountPaid: patient.packageDays === 'daily' ? sessionPrice : 0,
-      paymentMethod: patient.packageDays === 'daily' ? sessionPaymentMethod : null,
-      loggedBy: currentUser?.name
-    };
+    // Guard against rapid duplicate clicks (within last 10 seconds with same exercises)
+    const recentDuplicate = (patient.sessions || []).some(s => 
+      !s.isHidden && 
+      s.exercises?.trim() === exerciseText.trim() && 
+      (Date.now() - Number(s.id)) < 10000
+    );
+    if (recentDuplicate) {
+      alert("This session was already logged a moment ago.");
+      return;
+    }
 
-    const updatedPatient = {
-      ...patient,
-      sessions: [...patient.sessions, newSession],
-      lastEditedBy: currentUser?.name
-    };
+    setMarkingSession(true);
 
-    await savePatient(updatedPatient);
-    setPatient(updatedPatient);
-    setExerciseText('');
-    setProtocolText('');
-    setSessionPrice('');
-    setSessionPaymentMethod('UPI');
+    try {
+      const isDaily = patient.packageDays === 'daily' || patient.packageDays === 'per_session';
+      const parsedPrice = sessionPrice ? Number(sessionPrice) : 0;
+      
+      const newSession = {
+        id: Date.now().toString(),
+        date: new Date(sessionDate).toISOString(),
+        exercises: exerciseText,
+        protocol: protocolText,
+        amountPaid: isDaily ? parsedPrice : (parsedPrice > 0 ? parsedPrice : 0),
+        paymentMethod: sessionPrice ? sessionPaymentMethod : null,
+        loggedBy: currentUser?.name
+      };
+
+      const updatedPatient = {
+        ...patient,
+        sessions: [...patient.sessions, newSession],
+        lastEditedBy: currentUser?.name
+      };
+
+      await savePatient(updatedPatient);
+      setPatient(updatedPatient);
+      setExerciseText('');
+      setProtocolText('');
+      setSessionPrice('');
+      setSessionPaymentMethod('UPI');
+    } catch (err) {
+      console.error("Error marking session:", err);
+      alert("Failed to save session. Please try again.");
+    } finally {
+      setMarkingSession(false);
+    }
   };
 
   const handleDeleteSession = async (sessionId) => {
@@ -182,6 +207,7 @@ export default function PatientProfile() {
       packageDays: patient.packageDays,
       paymentAmount: patient.paymentAmount,
       paymentMethod: patient.paymentMethod,
+      paymentDate: patient.paymentDate || patient.startDate,
       sessions: patient.sessions,
       isUpgrade: isUpgrade
     };
@@ -192,6 +218,7 @@ export default function PatientProfile() {
       paymentAmount: sessionPrice,
       paymentMethod: sessionPaymentMethod,
       paymentReceived: true,
+      paymentDate: new Date(renewDate).toISOString(),
       startDate: new Date(renewDate).toISOString(),
       sessions: [], // Reset sessions
       packageHistory: [...(patient.packageHistory || []), historyEntry],
@@ -276,8 +303,9 @@ export default function PatientProfile() {
   const sessionsRemaining = isDaily ? null : Number(patient?.packageDays) - activeSessions.length;
   const isCompleted = !isDaily && sessionsRemaining <= 0;
 
+  const sessionPaidTotal = activeSessions.reduce((sum, s) => sum + Number(s.amountPaid || 0), 0);
   const dailyTotalPaid = isDaily 
-    ? activeSessions.reduce((sum, s) => sum + Number(s.amountPaid || 0), 0) + (patient.paymentReceived ? Number(patient.paymentAmount || 0) : 0)
+    ? (sessionPaidTotal > 0 ? sessionPaidTotal : (patient.paymentReceived ? Number(patient.paymentAmount || 0) : 0))
     : 0;
 
   return (
@@ -513,8 +541,13 @@ export default function PatientProfile() {
             </div>
             
             <div className="flex justify-end mt-2">
-              <button onClick={handleMarkSession} className="btn btn-primary" style={{ padding: '0.625rem 1.5rem' }}>
-                <CheckCircle size={18} /> Mark Attended
+              <button 
+                onClick={handleMarkSession} 
+                disabled={markingSession}
+                className="btn btn-primary" 
+                style={{ padding: '0.625rem 1.5rem', opacity: markingSession ? 0.7 : 1 }}
+              >
+                <CheckCircle size={18} /> {markingSession ? 'Saving...' : 'Mark Attended'}
               </button>
             </div>
           </div>

@@ -46,10 +46,16 @@ export default function Invoice() {
 
   const activeSessions = (patient.sessions || []).filter(s => !s.isHidden);
 
-  if (patient.packageDays === 'daily' && activeSessions.length > 0) {
-    activeSessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: patient.diagnosis}));
-    allAttendance = [...allAttendance, ...activeSessions];
-  } else if (patient.packageDays !== 'daily') {
+  const isDaily = patient.packageDays === 'daily' || patient.packageDays === 'per_session';
+
+  if (isDaily) {
+    if (activeSessions.length > 0) {
+      activeSessions.forEach(s => billItems.push({...s, isSession: true, packageDays: 'daily', diagnosis: patient.diagnosis}));
+      allAttendance = [...allAttendance, ...activeSessions];
+    } else if (patient.paymentReceived && patient.paymentAmount) {
+      billItems.push({ ...patient, isPackage: true, packageDays: 'Initial Consultation' });
+    }
+  } else {
     billItems.push({...patient, isPackage: true});
     if (activeSessions.length > 0) allAttendance = [...allAttendance, ...activeSessions];
   }

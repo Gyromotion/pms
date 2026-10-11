@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getDashboardStats, getAppointments } from '../lib/storage';
-import { Users, Activity, ArrowRight, Clock, User } from 'lucide-react';
+import { Users, Activity, ArrowRight, Clock, User, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useAuth } from '../lib/AuthContext';
@@ -11,41 +11,46 @@ export default function Dashboard() {
   const [recentPatients, setRecentPatients] = useState([]);
   const [nextPatient, setNextPatient] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth());
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [data, apts] = await Promise.all([
-          getDashboardStats(selectedMonth, selectedYear),
-          getAppointments()
-        ]);
-        
-        setStats({
-          totalPatients: data.totalPatients,
-          activePatients: data.activePatients,
-          totalRevenue: data.totalRevenue
-        });
-        
-        // Sort by most recent (assuming ID is timestamp)
-        setRecentPatients(data.patients.sort((a, b) => Number(b.id) - Number(a.id)).slice(0, 5));
+  const loadData = async () => {
+    setRefreshing(true);
+    try {
+      const [data, apts] = await Promise.all([
+        getDashboardStats(selectedMonth, selectedYear),
+        getAppointments()
+      ]);
+      
+      setStats({
+        totalPatients: data.totalPatients,
+        activePatients: data.activePatients,
+        totalRevenue: data.totalRevenue
+      });
+      
+      // Sort by most recent (assuming ID is timestamp)
+      setRecentPatients(data.patients.sort((a, b) => Number(b.id) - Number(a.id)).slice(0, 5));
 
-        // Get Next Patient
-        const now = new Date();
-        const futureApts = apts.filter(a => new Date(a.datetime) >= now).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
-        if (futureApts.length > 0) {
-          setNextPatient(futureApts[0]);
-        }
-      } catch (error) {
-        console.error("Error loading dashboard data:", error);
-      } finally {
-        setLoading(false);
+      // Get Next Patient
+      const now = new Date();
+      const futureApts = apts.filter(a => new Date(a.datetime) >= now).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+      if (futureApts.length > 0) {
+        setNextPatient(futureApts[0]);
+      } else {
+        setNextPatient(null);
       }
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, [selectedMonth, selectedYear]);
 
@@ -53,7 +58,19 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1 className="mb-6">Overview</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 style={{ margin: 0 }}>Overview</h1>
+        <button 
+          onClick={loadData} 
+          disabled={refreshing}
+          className="btn btn-outline flex items-center gap-2"
+          style={{ padding: '0.4rem 0.85rem', fontSize: '0.9rem' }}
+          title="Refresh Data"
+        >
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
       
       {nextPatient && (
         <div className="card glass-panel mb-6" style={{ borderLeft: '4px solid var(--primary-color)', backgroundColor: 'rgba(239, 246, 255, 0.4)' }}>
